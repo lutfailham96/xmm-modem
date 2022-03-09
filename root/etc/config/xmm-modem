@@ -2,4 +2,4 @@ config xmm-modem
 	option enable '1'
 	option device '/dev/ttyACM0'
 	option apn 'internet'
-	
+	option interface 'eth1'
