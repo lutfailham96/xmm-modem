@@ -1,8 +1,8 @@
 config xmm-modem
 	option enable '1'
-	option device '/dev/ttyACM2'
-	option nic 'fibocom'
-	option interface 'eth1'
+	option port '/dev/ttyACM2'
+	option device 'eth1'
+	option interface 'fibocom'
 	option apn 'internet'
-	option max_retries '3'
+	option max_retries '5'
 

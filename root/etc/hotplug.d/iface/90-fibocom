@@ -1,5 +1,5 @@
-MODEM_PORT=$(uci -q get xmm-modem.@xmm-modem[0].device)
-MODEM_NIC=$(uci -q get xmm-modem.@xmm-modem[0].nic)
+MODEM_PORT=$(uci -q get xmm-modem.@xmm-modem[0].port)
+MODEM_DEVICE=$(uci -q get xmm-modem.@xmm-modem[0].device)
 MODEM_INTERFACE=$(uci -q get xmm-modem.@xmm-modem[0].interface)
 MODEM_APN=$(uci -q get xmm-modem.@xmm-modem[0].apn)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
@@ -7,7 +7,7 @@ CONNECTION_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].max_retries)
 NODE="xmm-modem"
 
 check_xmm_configuration() {
-  logger -t "$NODE" "xmm-modem interface detected [${MODEM_NIC} - ${MODEM_INTERFACE}]"
+  logger -t "$NODE" "xmm-modem interface detected [${MODEM_DEVICE} - ${MODEM_INTERFACE}]"
   if [ ${MODEM_ENABLED} -ne 1 ]; then
     logger -t "$NODE" "xmm-modem is disabled"
     exit 0
@@ -73,26 +73,23 @@ xmm_configuration() {
     logger -t "${NODE}" "Failed to obtain IP address"
     exit 0
   fi
-  uci set network.${INTERFACE}=interface
-  uci set network.${INTERFACE}.proto='static'
-  uci set network.${INTERFACE}.ifname=${DEVICE}
-  uci set network.${INTERFACE}.force_link='1'
-  uci set network.${INTERFACE}.ipaddr=$(echo ${IP_ADDRESS})
-  uci set network.${INTERFACE}.netmask=255.255.255.0
-  uci set network.${INTERFACE}.gateway=${GATEWAY}
+  uci set network.${MODEM_INTERFACE}=interface
+  uci set network.${MODEM_INTERFACE}.proto='static'
+  uci set network.${MODEM_INTERFACE}.ifname=${MODEM_DEVICE}
+  uci set network.${MODEM_INTERFACE}.force_link='1'
+  uci set network.${MODEM_INTERFACE}.ipaddr=$(echo ${IP_ADDRESS})
+  uci set network.${MODEM_INTERFACE}.netmask=255.255.255.0
+  uci set network.${MODEM_INTERFACE}.gateway=${GATEWAY}
   if [ -n "$DNS" ]; then
-    uci set network.${INTERFACE}.dns="$(echo "$DNS")"
+    uci set network.${MODEM_INTERFACE}.dns="$(echo "$DNS")"
   else
-    uci set network.${INTERFACE}.dns="94.140.14.14 94.140.15.15"
+    uci set network.${MODEM_INTERFACE}.dns="94.140.14.14 94.140.15.15"
   fi
   if [ ${IP_ADDRESS} ]; then
-    ip link set dev ${DEVICE} arp off
+    ip link set dev ${MODEM_DEVICE} arp off
     uci commit network
     reload_config
   fi
-  uci set xmm-modem.@xmm-modem[0].nic="${INTERFACE}"
-  uci commit xmm-modem
-  uci commit network
   logger -t "${NODE}" "Network interface configured"
 }
 
@@ -106,16 +103,17 @@ xmm_start() {
 case ${ACTION} in
   ifup)
     case ${DEVICE} in
-      ${MODEM_INTERFACE})
+      ${MODEM_DEVICE})
         xmm_start
         ;;
     esac
     ;;
   ifdown)
     case ${INTERFACE} in
-      ${MODEM_NIC})
+      ${MODEM_INTERFACE})
         xmm_disconnect
       ;;
     esac
   ;;
 esac
+
