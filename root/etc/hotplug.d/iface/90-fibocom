@@ -1,16 +1,18 @@
 MODEM_PORT=$(uci -q get xmm-modem.@xmm-modem[0].device)
+MODEM_NIC=$(uci -q get xmm-modem.@xmm-modem[0].nic)
+MODEM_INTERFACE=$(uci -q get xmm-modem.@xmm-modem[0].interface)
 MODEM_APN=$(uci -q get xmm-modem.@xmm-modem[0].apn)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
-CONNECTION_MAX_RETRIES=3
+CONNECTION_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].max_retries)
 NODE="xmm-modem"
 
 check_xmm_configuration() {
-  logger -t "$NODE" "xmm-modem interface detected"
+  logger -t "$NODE" "xmm-modem interface detected [${MODEM_NIC} - ${MODEM_INTERFACE}]"
   if [ ${MODEM_ENABLED} -ne 1 ]; then
     logger -t "$NODE" "xmm-modem is disabled"
     exit 0
   fi
-  if [ ! ${MODEM_APN} ]; then
+  if [[ -z ${MODEM_APN} ]]; then
     logger -t "${NODE}" "APN not specified, using default APN: internet"
     MODEM_APN="internet"
   fi
@@ -88,7 +90,9 @@ xmm_configuration() {
     uci commit network
     reload_config
   fi
-  echo ${INTERFACE} > /tmp/xmm-modem
+  uci set xmm-modem.@xmm-modem[0].nic="${INTERFACE}"
+  uci commit xmm-modem
+  uci commit network
   logger -t "${NODE}" "Network interface configured"
 }
 
@@ -102,16 +106,15 @@ xmm_start() {
 case ${ACTION} in
   ifup)
     case ${DEVICE} in
-      usb0|wwan0|eth1|eth2|eth3)
+      ${MODEM_INTERFACE})
         xmm_start
         ;;
     esac
     ;;
   ifdown)
-    IFNAME=$(cat "/tmp/xmm-modem")
     case ${INTERFACE} in
-      ${IFNAME})
-      xmm_disconnect
+      ${MODEM_NIC})
+        xmm_disconnect
       ;;
     esac
   ;;
