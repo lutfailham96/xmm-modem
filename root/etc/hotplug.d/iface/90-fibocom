@@ -6,39 +6,42 @@ MODEM_METRIC=$(uci -q get xmm-modem.@xmm-modem[0].metric)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
 CONNECTION_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].max_retries)
 CONNECTION_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].connection_wait)
-NODE="xmm-modem"
+FORCE_LINK=$(uci -q get xmm-modem.@xmm-modem[0].force_link)
+MODEM_NODE="xmm-modem"
 
 check_xmm_configuration() {
-  logger -t "$NODE" "xmm-modem interface detected [${MODEM_DEVICE} - ${MODEM_INTERFACE}]"
+  logger -t "${MODEM_NODE}" "xmm-modem interface detected [${MODEM_DEVICE} - ${MODEM_INTERFACE}]"
   if [ ${MODEM_ENABLED} -ne 1 ]; then
-    logger -t "${NODE}" "xmm-modem is disabled"
+    logger -t "${MODEM_NODE}" "xmm-modem is disabled"
     exit 0
   fi
   if [[ -z ${MODEM_APN} ]]; then
-    logger -t "${NODE}" "APN not specified, using default APN: internet"
+    logger -t "${MODEM_NODE}" "APN not specified, using default APN (internet)"
     MODEM_APN="internet"
   fi
 }
 
-xmm_connect() {
-  logger -t "${NODE}" "Connecting modem"
-  CONNECT_SCRIPT="/etc/gcom/xmm-connect.gcom"
+xmm_setup() {
+  logger -t "${MODEM_NODE}" "Connecting modem"
+  logger -t "${MODEM_NODE}" "Connection configuration: APN=\"${MODEM_APN}\""
+  CONNECT_SCRIPT="/etc/gcom/xmm-modem/xmm-setup.gcom"
   XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
   IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
   if [[ ! -z ${IP_ADDRESS} ]]; then
-    logger -t "${NODE}" "Modem connected"
+    logger -t "${MODEM_NODE}" "Modem connected"
   else
-    RETRIES=0
+    RETRIES=1
     until [ ${IP_ADDRESS} ]; do
+      logger -t "${MODEM_NODE}" "Retrying connection: ${RETRIES}"
       XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
       IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
       if [[ ! -z ${IP_ADDRESS} ]]; then
-        logger -t "${NODE}" "Modem connected"
+        logger -t "${MODEM_NODE}" "Modem connected to carrier network"
         break
       else
         RETRIES=$((${RETRIES}+1))
-        if [ ${RETRIES} -ge ${CONNECTION_MAX_RETRIES} ]; then
-          logger -t "${NODE}" "Modem failed to connect"
+        if [ ${RETRIES} -gt ${CONNECTION_MAX_RETRIES} ]; then
+          logger -t "${MODEM_NODE}" "Modem connection failed"
           exit 1
         fi
       fi
@@ -47,15 +50,15 @@ xmm_connect() {
 }
 
 xmm_disconnect() {
-  logger -t "${NODE}" "Disconnecting modem"
-  DISCONNECT_SCRIPT="/etc/gcom/xmm-disconnect.gcom"
+  logger -t "${MODEM_NODE}" "Disconnecting modem"
+  DISCONNECT_SCRIPT="/etc/gcom/xmm-modem/xmm-disconnect.gcom"
   gcom -d ${MODEM_PORT} -s ${DISCONNECT_SCRIPT}
-  logger -t "${NODE}" "Modem disconnected"
+  logger -t "${MODEM_NODE}" "Modem disconnected"
 }
 
 xmm_configuration() {
-  logger -t "${NODE}" "Configuring network interface"
-  CONFIGURATION_SCRIPT="/etc/gcom/xmm-config.gcom"
+  logger -t "${MODEM_NODE}" "Configuring network interface"
+  CONFIGURATION_SCRIPT="/etc/gcom/xmm-modem/xmm-config.gcom"
   XMM_CONFIGURATION=$(gcom -d ${MODEM_PORT} -s ${CONFIGURATION_SCRIPT})
   IP_ADDRESS=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"|\r",""); print $2}'| sed 's/[[:space:]]//g')
   DNS=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+XDNS: 1/{gsub("\r|\"",""); print $2" "$3}' | sed 's/^[[:space:]]//g')
@@ -70,17 +73,18 @@ xmm_configuration() {
   if [ ${IP_ADDRESS} ]; then
     GATEWAY=$(echo ${IP_ADDRESS} | awk -F [.] '{print $1"."$2"."$3".1"}')
   else
-    logger -t "${NODE}" "Failed to obtain IP address"
+    logger -t "${MODEM_NODE}" "Failed to obtain IP address"
     exit 1
   fi
+  logger -t "${MODEM_NODE}" "Obtained network configuration: IP=\"${IP_ADDRESS}\" DNS=\"${DNS}\""
   uci set network.${MODEM_INTERFACE}=interface
   uci set network.${MODEM_INTERFACE}.proto='static'
   uci set network.${MODEM_INTERFACE}.ifname=${MODEM_DEVICE}
-  uci set network.${MODEM_INTERFACE}.force_link='1'
+  [[ ${FORCE_LINK} -gt 0 ]] && uci set network.${MODEM_INTERFACE}.force_link='1'
   uci set network.${MODEM_INTERFACE}.ipaddr=$(echo ${IP_ADDRESS})
   uci set network.${MODEM_INTERFACE}.netmask=255.255.255.0
   uci set network.${MODEM_INTERFACE}.gateway=${GATEWAY}
-  [[ ! -z ${MODEM_METRIC} ]] && uci set network.${MODEM_INTERFACE}.metric=${MODEM_METRIC}
+  [[ ${MODEM_METRIC} -gt 0 ]] && uci set network.${MODEM_INTERFACE}.metric=${MODEM_METRIC}
   if [ -n "${DNS}" ]; then
     uci set network.${MODEM_INTERFACE}.dns="$(echo "$DNS")"
   else
@@ -91,15 +95,25 @@ xmm_configuration() {
     uci commit network
     reload_config
   fi
-  logger -t "${NODE}" "Network interface configured"
+  logger -t "${MODEM_NODE}" "Network interface configured"
+}
+
+xmm_connect() {
+  logger -t "${MODEM_NODE}" "Activating data channel"
+  DATA_SCRIPT="/etc/gcom/xmm-modem/xmm-connect.gcom"
+  gcom -d ${MODEM_PORT} -s ${DATA_SCRIPT}
 }
 
 xmm_start() {
+  if ip link show ${MODEM_DEVICE} | grep -q "state UP"; then
+    exit 0
+  fi
   check_xmm_configuration
-  xmm_connect
+  xmm_setup
   xmm_configuration
-  sleep ${CONNECTION_WAIT}
-  logger -t "${NODE}" "Connection established"
+  xmm_connect
+  [[ ${CONNECTION_WAIT} -gt 0 ]] && sleep ${CONNECTION_WAIT}
+  logger -t "${MODEM_NODE}" "Connection established"
 }
 
 case ${ACTION} in
@@ -118,3 +132,4 @@ case ${ACTION} in
     esac
   ;;
 esac
+
