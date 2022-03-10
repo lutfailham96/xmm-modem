@@ -11,3 +11,4 @@ opengt
  send "AT+XDNS?^m"
  get 1 "" $s
  print $s
+

@@ -6,3 +6,4 @@ opengt
 
  send "AT+CGACT=0^m"
  send "AT+XDATACHANNEL=0^m"
+
