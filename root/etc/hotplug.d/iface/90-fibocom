@@ -2,14 +2,16 @@ MODEM_PORT=$(uci -q get xmm-modem.@xmm-modem[0].port)
 MODEM_DEVICE=$(uci -q get xmm-modem.@xmm-modem[0].device)
 MODEM_INTERFACE=$(uci -q get xmm-modem.@xmm-modem[0].interface)
 MODEM_APN=$(uci -q get xmm-modem.@xmm-modem[0].apn)
+MODEM_METRIC=$(uci -q get xmm-modem.@xmm-modem[0].metric)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
 CONNECTION_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].max_retries)
+CONNECTION_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].connection_wait)
 NODE="xmm-modem"
 
 check_xmm_configuration() {
   logger -t "$NODE" "xmm-modem interface detected [${MODEM_DEVICE} - ${MODEM_INTERFACE}]"
   if [ ${MODEM_ENABLED} -ne 1 ]; then
-    logger -t "$NODE" "xmm-modem is disabled"
+    logger -t "${NODE}" "xmm-modem is disabled"
     exit 0
   fi
   if [[ -z ${MODEM_APN} ]]; then
@@ -22,14 +24,14 @@ xmm_connect() {
   logger -t "${NODE}" "Connecting modem"
   CONNECT_SCRIPT="/etc/gcom/xmm-connect.gcom"
   XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
-  IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR/{gsub("\"", ""); print $2}')
+  IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
   if [[ ! -z ${IP_ADDRESS} ]]; then
     logger -t "${NODE}" "Modem connected"
   else
     RETRIES=0
     until [ ${IP_ADDRESS} ]; do
       XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
-      IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR/{gsub("\"", ""); print $2}')
+      IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
       if [[ ! -z ${IP_ADDRESS} ]]; then
         logger -t "${NODE}" "Modem connected"
         break
@@ -37,7 +39,7 @@ xmm_connect() {
         RETRIES=$((${RETRIES}+1))
         if [ ${RETRIES} -ge ${CONNECTION_MAX_RETRIES} ]; then
           logger -t "${NODE}" "Modem failed to connect"
-          exit 0
+          exit 1
         fi
       fi
     done
@@ -55,10 +57,8 @@ xmm_configuration() {
   logger -t "${NODE}" "Configuring network interface"
   CONFIGURATION_SCRIPT="/etc/gcom/xmm-config.gcom"
   XMM_CONFIGURATION=$(gcom -d ${MODEM_PORT} -s ${CONFIGURATION_SCRIPT})
-  IP_ADDRESS=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+CGPADDR/{gsub("\"|\r",""); print $2}'| sed 's/[[:space:]]//g')
-  DNS0=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+XDNS: 0/{gsub("\r|\"",""); print $2" "$3}' | sed 's/^[[:space:]]//g')
-  DNS1=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+XDNS: 1/{gsub("\r|\"",""); print $2" "$3}' | sed 's/^[[:space:]]//g')
-  DNS="${DNS0} ${DNS1}"
+  IP_ADDRESS=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"|\r",""); print $2}'| sed 's/[[:space:]]//g')
+  DNS=$(echo "${XMM_CONFIGURATION}" | awk -F [,] '/^\+XDNS: 1/{gsub("\r|\"",""); print $2" "$3}' | sed 's/^[[:space:]]//g')
   for d in ${DNS}; do
     if [ $(echo "${NS}" | grep "${d}") ]; then
       false
@@ -71,7 +71,7 @@ xmm_configuration() {
     GATEWAY=$(echo ${IP_ADDRESS} | awk -F [.] '{print $1"."$2"."$3".1"}')
   else
     logger -t "${NODE}" "Failed to obtain IP address"
-    exit 0
+    exit 1
   fi
   uci set network.${MODEM_INTERFACE}=interface
   uci set network.${MODEM_INTERFACE}.proto='static'
@@ -80,7 +80,8 @@ xmm_configuration() {
   uci set network.${MODEM_INTERFACE}.ipaddr=$(echo ${IP_ADDRESS})
   uci set network.${MODEM_INTERFACE}.netmask=255.255.255.0
   uci set network.${MODEM_INTERFACE}.gateway=${GATEWAY}
-  if [ -n "$DNS" ]; then
+  [[ ! -z ${MODEM_METRIC} ]] && uci set network.${MODEM_INTERFACE}.metric=${MODEM_METRIC}
+  if [ -n "${DNS}" ]; then
     uci set network.${MODEM_INTERFACE}.dns="$(echo "$DNS")"
   else
     uci set network.${MODEM_INTERFACE}.dns="94.140.14.14 94.140.15.15"
@@ -97,6 +98,7 @@ xmm_start() {
   check_xmm_configuration
   xmm_connect
   xmm_configuration
+  sleep ${CONNECTION_WAIT}
   logger -t "${NODE}" "Connection established"
 }
 
@@ -116,4 +118,3 @@ case ${ACTION} in
     esac
   ;;
 esac
-
