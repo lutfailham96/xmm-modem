@@ -4,8 +4,9 @@ config xmm-modem
 	option device 'eth1'
 	option interface 'fibocom'
 	option apn 'internet'
+	option metric '0'
 	option max_retries '10'
 	option connection_wait '0'
-	option metric '0'
+	option disable_max_retries '0'
 	option force_link '0'
 
