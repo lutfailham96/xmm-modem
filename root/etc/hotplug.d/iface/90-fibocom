@@ -80,11 +80,11 @@ xmm_configuration() {
   uci set network.${MODEM_INTERFACE}=interface
   uci set network.${MODEM_INTERFACE}.proto='static'
   uci set network.${MODEM_INTERFACE}.ifname=${MODEM_DEVICE}
-  [[ ${FORCE_LINK} -gt 0 ]] && uci set network.${MODEM_INTERFACE}.force_link='1'
+  [[ ${FORCE_LINK} -gt 0 ]] && uci set network.${MODEM_INTERFACE}.force_link='1' || uci -q delete network.${MODEM_INTERFACE}.force_link
   uci set network.${MODEM_INTERFACE}.ipaddr=$(echo ${IP_ADDRESS})
   uci set network.${MODEM_INTERFACE}.netmask=255.255.255.0
   uci set network.${MODEM_INTERFACE}.gateway=${GATEWAY}
-  [[ ${MODEM_METRIC} -gt 0 ]] && uci set network.${MODEM_INTERFACE}.metric=${MODEM_METRIC}
+  [[ ${MODEM_METRIC} -gt 0 ]] && uci set network.${MODEM_INTERFACE}.metric=${MODEM_METRIC} || uci -q delete network.${MODEM_INTERFACE}.metric
   if [ -n "${DNS}" ]; then
     uci set network.${MODEM_INTERFACE}.dns="$(echo "$DNS")"
   else
