@@ -6,6 +6,7 @@ MODEM_METRIC=$(uci -q get xmm-modem.@xmm-modem[0].metric)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
 DISABLE_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].disable_max_retries)
 CONNECTION_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].max_retries)
+RETRY_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].retry_wait)
 CONNECTION_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].connection_wait)
 FORCE_LINK=$(uci -q get xmm-modem.@xmm-modem[0].force_link)
 MODEM_NODE="xmm-modem"
@@ -23,19 +24,27 @@ check_xmm_configuration() {
 }
 
 xmm_setup() {
+  [[ -z ${RETRY_WAIT} ]] && RETRY_WAIT=3
   logger -t "${MODEM_NODE}" "Connecting modem"
   logger -t "${MODEM_NODE}" "Connection configuration: APN=\"${MODEM_APN}\""
   [[ ${DISABLE_MAX_RETRIES} -gt 0 ]] && logger -t "${MODEM_NODE}" "[WARNING] max retries is disabled. If you wish to abort connection procedure, you may unplug device directly"
   CONNECT_SCRIPT="/etc/gcom/xmm-modem/xmm-setup.gcom"
   XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
+  [[ ${RETRY_WAIT} -gt 0 ]] && sleep ${RETRY_WAIT}
   IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
   if [[ ! -z ${IP_ADDRESS} ]]; then
     logger -t "${MODEM_NODE}" "Modem connected"
   else
     RETRIES=1
     until [ ${IP_ADDRESS} ]; do
+      if ! lsusb | grep -q '8087:095a'; then
+        logger -t "${MODEM_NODE}" "Modem unplugged"
+        logger -t "${MODEM_NODE}" "Modem connection failed"
+        exit 1
+      fi
       logger -t "${MODEM_NODE}" "Retrying connection: ${RETRIES}"
       XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
+      [[ ${RETRY_WAIT} -gt 0 ]] && sleep ${RETRY_WAIT}
       IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
       if [[ ! -z ${IP_ADDRESS} ]]; then
         logger -t "${MODEM_NODE}" "Modem connected to carrier network"
