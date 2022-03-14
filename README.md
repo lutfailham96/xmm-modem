@@ -4,7 +4,7 @@ Intel XMM 7650 LTE-A Pro modem.
 # How-to compile package
 ```
 cd feeds/package/net/
-git clone https://github.com/koshev-msk/xmm-modem.git
+git clone https://github.com/lutfailham96/xmm-modem.git
 cd ../../..
 ./scripts feeds update -a; ./scripts/feeds install -a
 make -j $(($(nproc)+1)) package/feeds/packages/xmm-modem/compile
