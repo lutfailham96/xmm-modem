@@ -14,12 +14,17 @@ make -j $(($(nproc)+1)) package/feeds/packages/xmm-modem/compile
 The config stored in /etc/config/xmm-modem. Example configuration:
 ```
 config xmm-modem
-	option enable '1'            # Enable / disable modem
-	option device '/dev/ttyACM2' # Device serial port
-	option nic 'fibocom'         # Network interface
-	option interface 'eth1'      # Device interface
-	option apn 'internet'        # APN
-	option max_retries '3'       # Connection max retries
+	option enable '1'              # Enable / disable modem
+	option device '/dev/ttyACM2'   # Device serial port
+	option nic 'fibocom'           # Network interface
+	option interface 'eth1'        # Device interface
+	option apn 'internet'          # APN
+	option max_retries '3'         # Connection max retries
+	option metric '0'              # Optional, custom network metric
+	option max_retries '10'        # Optional, max retries
+	option connection_wait '0  '   # Optional, wait connection before close hotplug procedure
+	option disable_max_retries '0' # Optional, force connection attempt & ignoring max retries
+	option force_link '0'          # Optional, force network link to be up
 ```
 
 # How-to configure interface
