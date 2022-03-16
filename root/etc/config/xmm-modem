@@ -9,4 +9,6 @@ config xmm-modem
 	option connection_wait '0'
 	option disable_max_retries '0'
 	option force_link '0'
+	option enable_watchdog '1'
+	option connection_status '0'
 
