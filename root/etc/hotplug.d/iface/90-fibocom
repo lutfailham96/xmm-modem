@@ -6,8 +6,10 @@ MODEM_METRIC=$(uci -q get xmm-modem.@xmm-modem[0].metric)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
 DISABLE_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].disable_max_retries)
 CONNECTION_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].max_retries)
+RETRY_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].retry_wait)
 CONNECTION_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].connection_wait)
 FORCE_LINK=$(uci -q get xmm-modem.@xmm-modem[0].force_link)
+WATCHDOG_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable_watchdog)
 MODEM_NODE="xmm-modem"
 
 check_xmm_configuration() {
@@ -23,6 +25,7 @@ check_xmm_configuration() {
 }
 
 xmm_setup() {
+  [[ -z ${RETRY_WAIT} ]] && RETRY_WAIT=3
   logger -t "${MODEM_NODE}" "Connecting modem"
   logger -t "${MODEM_NODE}" "Connection configuration: APN=\"${MODEM_APN}\""
   [[ ${DISABLE_MAX_RETRIES} -gt 0 ]] && logger -t "${MODEM_NODE}" "[WARNING] max retries is disabled. If you wish to abort connection procedure, you may unplug device directly"
@@ -128,6 +131,22 @@ xmm_start() {
   logger -t "${MODEM_NODE}" "Connection established"
 }
 
+watchdog_start() {
+  if [[ ${WATCHDOG_ENABLED} -eq 1 ]]; then
+    logger -t "${MODEM_NODE}" "Starting watchdog"
+    /usr/bin/xmm75xx-watchdog > /dev/null 2>&1 &
+    logger -t "${MODEM_NODE}" "Watchdog started"
+  fi
+}
+
+watchdog_stop() {
+  if [[ ${WATCHDOG_ENABLED} -eq 1 ]]; then
+    logger -t "${MODEM_NODE}" "Stopping watchdog"
+    /usr/bin/xmm75xx-watchdog -k > /dev/null 2>&1 &
+    logger -t "${MODEM_NODE}" "Watchdog stopped"
+  fi
+}
+
 case ${ACTION} in
   ifup)
     case ${DEVICE} in
@@ -135,10 +154,16 @@ case ${ACTION} in
         xmm_start
         ;;
     esac
+    case ${INTERFACE} in
+      ${MODEM_INTERFACE})
+        watchdog_start
+        ;;
+    esac
     ;;
   ifdown)
     case ${INTERFACE} in
       ${MODEM_INTERFACE})
+        watchdog_stop
         xmm_disconnect
       ;;
     esac
