@@ -14,9 +14,9 @@ The config stored in /etc/config/xmm-modem. Example configuration:
 ```
 config xmm-modem
 	option enable '1'              # Enable / disable modem
-	option device '/dev/ttyACM2'   # Device serial port
-	option nic 'fibocom'           # Network interface
-	option interface 'eth1'        # Device interface
+	option port '/dev/ttyACM2'     # Device serial port
+	option device 'eth1'           # Device interface
+	option interface 'fibocom'     # Network interface
 	option apn 'internet'          # APN
 	option max_retries '3'         # Connection max retries
 	option metric '0'              # Optional, custom network metric
