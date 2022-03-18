@@ -18,6 +18,10 @@ config xmm-modem
 	option device 'eth1'           # Device interface
 	option interface 'fibocom'     # Network interface
 	option apn 'internet'          # APN
+	option auth_type 'none'        # APN authentication type: none, pap, chap
+	option auth_username 'none'    # APN username
+	option auth_password 'none'    # APN password
+	option retry_wait '3'          # Connection retry delay
 	option max_retries '3'         # Connection max retries
 	option metric '0'              # Optional, custom network metric
 	option max_retries '10'        # Optional, max retries
