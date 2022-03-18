@@ -2,6 +2,9 @@ MODEM_PORT=$(uci -q get xmm-modem.@xmm-modem[0].port)
 MODEM_DEVICE=$(uci -q get xmm-modem.@xmm-modem[0].device)
 MODEM_INTERFACE=$(uci -q get xmm-modem.@xmm-modem[0].interface)
 MODEM_APN=$(uci -q get xmm-modem.@xmm-modem[0].apn)
+MODEM_AUTH_TYPE=$(uci -q get xmm-modem.@xmm-modem[0].auth_type)
+MODEM_AUTH_USERNAME=$(uci -q get xmm-modem.@xmm-modem[0].auth_username)
+MODEM_AUTH_PASSWORD=$(uci -q get xmm-modem.@xmm-modem[0].auth_password)
 MODEM_METRIC=$(uci -q get xmm-modem.@xmm-modem[0].metric)
 MODEM_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable)
 DISABLE_MAX_RETRIES=$(uci -q get xmm-modem.@xmm-modem[0].disable_max_retries)
@@ -24,13 +27,27 @@ check_xmm_configuration() {
   fi
 }
 
-xmm_setup() {
-  [[ -z ${RETRY_WAIT} ]] && RETRY_WAIT=3
+xmm_connect() {
+  [[ -z ${RETRY_WAIT} ]] && RETRY_WAIT=0
+  CONNECT_SCRIPT="/etc/gcom/xmm-modem/xmm-connect.gcom"
+  [[ ${MODEM_AUTH_TYPE} == "pap" || ${MODEM_AUTH_TYPE} == "chap" ]] && CONNECT_SCRIPT="/etc/gcom/xmm-modem/xmm-connect_auth.gcom"
+  AUTH_CREDENTIALS="USERNAME=\"${MODEM_AUTH_USERNAME}\" PASSWORD=\"${MODEM_AUTH_PASSWORD}\""
+  case ${MODEM_AUTH_TYPE} in
+    "none")
+      AUTH_TYPE=0
+      AUTH_CREDENTIALS=""
+      ;;
+    "pap")
+      AUTH_TYPE=1
+      ;;
+    "chap")
+      AUTH_TYPE=2
+      ;;
+  esac
   logger -t "${MODEM_NODE}" "Connecting modem"
-  logger -t "${MODEM_NODE}" "Connection configuration: APN=\"${MODEM_APN}\""
+  logger -t "${MODEM_NODE}" "Connection configuration: APN=\"${MODEM_APN}\" AUTH_TYPE=\"${MODEM_AUTH_TYPE}\" ${AUTH_CREDENTIALS}"
   [[ ${DISABLE_MAX_RETRIES} -gt 0 ]] && logger -t "${MODEM_NODE}" "[WARNING] max retries is disabled. If you wish to abort connection procedure, you may unplug device directly"
-  CONNECT_SCRIPT="/etc/gcom/xmm-modem/xmm-setup.gcom"
-  XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
+  XMM_CONNECT=$(APN=${MODEM_APN} TYPE=${AUTH_TYPE} USERNAME=${MODEM_AUTH_USERNAME} PASSWORD=${MODEM_AUTH_PASSWORD} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
   IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
   if [[ ! -z ${IP_ADDRESS} ]]; then
     logger -t "${MODEM_NODE}" "Modem connected"
@@ -42,8 +59,9 @@ xmm_setup() {
         logger -t "${MODEM_NODE}" "Modem connection failed"
         exit 1
       fi
+      [[ ${RETRY_WAIT} -gt 0 ]] && sleep ${RETRY_WAIT}
       logger -t "${MODEM_NODE}" "Retrying connection: ${RETRIES}"
-      XMM_CONNECT=$(APN=${MODEM_APN} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
+      XMM_CONNECT=$(APN=${MODEM_APN} TYPE=${AUTH_TYPE} USERNAME=${MODEM_AUTH_USERNAME} PASSWORD=${MODEM_AUTH_PASSWORD} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
       IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
       if [[ ! -z ${IP_ADDRESS} ]]; then
         logger -t "${MODEM_NODE}" "Modem connected to carrier network"
@@ -113,9 +131,9 @@ xmm_configuration() {
   logger -t "${MODEM_NODE}" "Network interface configured"
 }
 
-xmm_connect() {
+xmm_data() {
   logger -t "${MODEM_NODE}" "Activating data channel"
-  DATA_SCRIPT="/etc/gcom/xmm-modem/xmm-connect.gcom"
+  DATA_SCRIPT="/etc/gcom/xmm-modem/xmm-data.gcom"
   gcom -d ${MODEM_PORT} -s ${DATA_SCRIPT}
 }
 
@@ -124,9 +142,9 @@ xmm_start() {
     exit 0
   fi
   check_xmm_configuration
-  xmm_setup
-  xmm_configuration
   xmm_connect
+  xmm_configuration
+  xmm_data
   [[ ${CONNECTION_WAIT} -gt 0 ]] && sleep ${CONNECTION_WAIT}
   logger -t "${MODEM_NODE}" "Connection established"
 }
