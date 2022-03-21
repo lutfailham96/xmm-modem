@@ -50,7 +50,7 @@ xmm_connect() {
   XMM_CONNECT=$(APN=${MODEM_APN} TYPE=${AUTH_TYPE} USERNAME=${MODEM_AUTH_USERNAME} PASSWORD=${MODEM_AUTH_PASSWORD} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
   IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
   if [[ ! -z ${IP_ADDRESS} ]]; then
-    logger -t "${MODEM_NODE}" "Modem connected"
+    logger -t "${MODEM_NODE}" "Modem connected to carrier network: IP=\"${IP_ADDRESS}\""
   else
     RETRIES=1
     until [ ${IP_ADDRESS} ]; do
@@ -64,7 +64,7 @@ xmm_connect() {
       XMM_CONNECT=$(APN=${MODEM_APN} TYPE=${AUTH_TYPE} USERNAME=${MODEM_AUTH_USERNAME} PASSWORD=${MODEM_AUTH_PASSWORD} gcom -d ${MODEM_PORT} -s ${CONNECT_SCRIPT})
       IP_ADDRESS=$(echo "${XMM_CONNECT}" | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"", ""); print $2}')
       if [[ ! -z ${IP_ADDRESS} ]]; then
-        logger -t "${MODEM_NODE}" "Modem connected to carrier network"
+        logger -t "${MODEM_NODE}" "Modem connected to carrier network: IP=\"${IP_ADDRESS}\""
         break
       else
         RETRIES=$((${RETRIES}+1))
@@ -187,4 +187,3 @@ case ${ACTION} in
     esac
   ;;
 esac
-
