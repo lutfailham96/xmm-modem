@@ -14,6 +14,7 @@ CONNECTION_WAIT=$(uci -q get xmm-modem.@xmm-modem[0].connection_wait)
 FORCE_LINK=$(uci -q get xmm-modem.@xmm-modem[0].force_link)
 WATCHDOG_ENABLED=$(uci -q get xmm-modem.@xmm-modem[0].enable_watchdog)
 MODEM_NODE="xmm-modem"
+LOCK_FILE="/tmp/xmm75xx.lock"
 
 check_xmm_configuration() {
   logger -t "${MODEM_NODE}" "xmm-modem interface detected [${MODEM_DEVICE} - ${MODEM_INTERFACE}]"
@@ -138,14 +139,28 @@ xmm_data() {
 }
 
 xmm_start() {
-  if ip link show ${MODEM_DEVICE} | grep -q "state UP"; then
+  #if ip link show ${MODEM_DEVICE} | grep -q "state UP"; then
+  #  exit 0
+  #fi
+
+  if [ -f ${LOCK_FILE} ]; then
+    logger -t "${MODEM_NODE}" "Could not open lock file (${LOCK_FILE})"
     exit 0
   fi
+
+  ip_address=$(at-modem AT+CGPADDR | awk -F [,] '/^\+CGPADDR: 1/{gsub("\"|\r",""); print $2}'| sed 's/[[:space:]]//g' | sed 's/ *$//g' 2> /dev/null)
+  if [ ! -z ${ip_address} ]; then
+    logger -t "${MODEM_NODE}" "Modem already connected, exiting ..."
+    exit 0
+  fi
+
+  touch ${LOCK_FILE}
   check_xmm_configuration
   xmm_connect
   xmm_configuration
   xmm_data
   [[ ${CONNECTION_WAIT} -gt 0 ]] && sleep ${CONNECTION_WAIT}
+  rm -f ${LOCK_FILE}
   logger -t "${MODEM_NODE}" "Connection established"
 }
 
@@ -187,3 +202,4 @@ case ${ACTION} in
     esac
   ;;
 esac
+
